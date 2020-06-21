@@ -4,13 +4,30 @@
             [cognitect.rebl.ui :as ui]
             [nrepl.middleware.print :refer [wrap-print]]
             [nrepl.middleware :refer [set-descriptor!]]
-            [nrepl.transport :as transport])
+            [nrepl.transport :as transport]
+            [clojure.string :as str])
   (:import [nrepl.transport Transport]))
 
+(def filter-fns (atom #{}))
+
+(def default-filters #{"set!" "in-ns" "with-in-str" "clojure.core/*print-length*"})
+
+(defn add-filter-fn!
+  [fs]
+  (if (set? fs)
+    (swap! filter-fns #(into % fs))
+    (swap! filter-fns #(conj % fs))))
+
+(defn remove-filter-fn!
+  [fs]
+  (if (set? fs)
+    (swap! filter-fns #(reduce disj % fs))
+    (swap! filter-fns #(disj % fs))))
 
 (defn send-to-rebl! [{:keys [code] :as req} {:keys [value] :as resp}]
-  (when (and code (contains? resp :value))
-        (rebl/submit (read-string code) value))
+  (when-not (and code (some #(str/includes? code %) @filter-fns))
+    (when (contains? resp :value)
+      (rebl/submit (read-string code) value)))
   resp)
 
 (defn- wrap-rebl-sender
@@ -41,6 +58,7 @@
 (comment
 
   (rebl/ui)
+  (add-filter-fn! default-filters)
 
   (require '[nrepl.core :as nrepl])
 
